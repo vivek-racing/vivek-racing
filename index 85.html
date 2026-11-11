@@ -1,0 +1,265 @@
+
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Vivek Racing Pro 2.0</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#101827;color:white;text-align:center;font-family:Arial}
+h1{color:#ffcc00}
+canvas{width:min(95vw,400px);border:3px solid white;border-radius:12px}
+button{padding:13px 20px;margin:5px;border:0;border-radius:9px;background:#ffcc00;font-size:17px;font-weight:bold}
+#info{font-size:18px;margin:10px}
+</style>
+</head>
+<body>
+<h1>🏎️ VIVEK RACING PRO 2.0</h1>
+<div id="info">🏆 Score: <span id="score">0</span></div>
+<canvas id="game" width="360" height="550"></canvas>
+<br>
+<button onclick="start()">▶ START</button>
+<button onclick="pause()">⏸ PAUSE</button>
+<button onclick="soundToggle()">🔊 SOUND</button>
+<br>
+<button onpointerdown="move(-1)">⬅ LEFT</button>
+<button onpointerdown="move(1)">RIGHT ➡</button>
+
+<br>
+<button onclick="nitro()">🚀 NITRO BOOST</button>
+<div>🏆 Best Score: <span id="best">0</span></div>
+
+<div id="status">Ready to Race!</div>
+
+<script>
+const c=document.getElementById("game");
+const ctx=c.getContext("2d");
+let player=160,enemies=[],score=0,speed=4;
+let running=false,paused=false,started=false;
+let frame=0,road=0,sound=true,audio;
+
+let bestScore = Number(localStorage.getItem("vivekBest") || 0);
+let nitroActive = false;
+
+document.getElementById("best").textContent = bestScore;
+
+function nitro(){
+ if(!running || paused || nitroActive) return;
+
+ nitroActive = true;
+ speed += 4;
+ beep(700);
+
+ document.getElementById("status").textContent = "🚀 NITRO ACTIVE!";
+
+ setTimeout(()=>{
+   speed = Math.max(4, speed - 4);
+   nitroActive = false;
+ },3000);
+}
+
+
+
+let audioContext;
+
+let musicTimer = null;
+let musicStep = 0;
+
+const melody = [
+  392,440,523,440,392,330,392,523,
+  587,523,440,392,330,392,440,523
+];
+
+function playMusic(){
+  if(!sound || !running || paused) return;
+
+  audioContext = audioContext ||
+  new (window.AudioContext || window.webkitAudioContext)();
+
+  audioContext.resume();
+
+  let osc = audioContext.createOscillator();
+  let gain = audioContext.createGain();
+
+  osc.type = "triangle";
+  osc.frequency.value = melody[musicStep % melody.length];
+
+  gain.gain.setValueAtTime(0.035,audioContext.currentTime);
+  gain.gain.exponentialRampToValueAtTime(
+    0.001,audioContext.currentTime+0.20
+  );
+
+  osc.connect(gain);
+  gain.connect(audioContext.destination);
+
+  osc.start();
+  osc.stop(audioContext.currentTime+0.22);
+
+  musicStep++;
+}
+
+function startMusic(){
+  stopMusic();
+  if(!sound || !running || paused) return;
+  playMusic();
+  musicTimer = setInterval(playMusic,250);
+}
+
+function stopMusic(){
+  if(musicTimer){
+    clearInterval(musicTimer);
+    musicTimer=null;
+  }
+}
+
+
+function beep(freq=150){
+ if(!sound) return;
+
+ try{
+  audioContext = audioContext ||
+  new (window.AudioContext || window.webkitAudioContext)();
+
+  if(audioContext.state === "suspended"){
+   audioContext.resume();
+  }
+
+  const osc = audioContext.createOscillator();
+  const gain = audioContext.createGain();
+
+  osc.type = "sawtooth";
+  osc.frequency.value = freq;
+
+  gain.gain.setValueAtTime(0.12,audioContext.currentTime);
+  gain.gain.exponentialRampToValueAtTime(
+    0.001,audioContext.currentTime+0.25
+  );
+
+  osc.connect(gain);
+  gain.connect(audioContext.destination);
+
+  osc.start();
+  osc.stop(audioContext.currentTime+0.25);
+
+ }catch(error){
+  console.log(error);
+ }
+}
+
+
+function car(x,y,color){
+ ctx.save();
+ ctx.fillStyle="#080808";
+ ctx.fillRect(x-4,y+12,7,17);
+ ctx.fillRect(x+37,y+12,7,17);
+ ctx.fillRect(x-4,y+47,7,17);
+ ctx.fillRect(x+37,y+47,7,17);
+ ctx.fillStyle=color;
+ ctx.beginPath();ctx.roundRect(x,y,40,70,10);ctx.fill();
+ ctx.fillStyle="#9eeaff";
+ ctx.fillRect(x+7,y+12,26,15);
+ ctx.fillRect(x+7,y+43,26,12);
+ ctx.fillStyle="yellow";
+ ctx.fillRect(x+4,y+3,8,5);
+ ctx.fillRect(x+28,y+3,8,5);
+ ctx.restore();
+}
+
+function roadDraw(){
+ ctx.fillStyle="#16833d";ctx.fillRect(0,0,360,550);
+ ctx.fillStyle="#444";ctx.fillRect(35,0,290,550);
+ ctx.fillStyle="white";
+ ctx.fillRect(35,0,5,550);ctx.fillRect(320,0,5,550);
+ for(let y=-50+road;y<550;y+=90){
+ ctx.fillRect(177,y,6,45);
+ }
+ road=(road+speed)%90;
+ ctx.font="24px Arial";
+ for(let y=20;y<550;y+=100){
+ ctx.fillText("🌳",0,y);
+ ctx.fillText("🌳",330,y);
+ }
+}
+
+function move(d){
+ if(running&&!paused){
+ player=Math.max(45,Math.min(275,player+d*45));
+ beep(180);
+ }
+}
+
+document.addEventListener("keydown",e=>{
+ if(e.key==="ArrowLeft")move(-1);
+ if(e.key==="ArrowRight")move(1);
+});
+
+function start(){
+ player=160;enemies=[];score=0;speed=4;
+ running=true;paused=false;started=true;
+ startMusic();
+ document.getElementById("score").textContent=0;
+ document.getElementById("status").textContent="🏁 RACE STARTED!";
+ requestAnimationFrame(loop);
+}
+
+function pause(){
+ if(!running)return;
+ paused=!paused;
+ if(paused) stopMusic();
+else startMusic();
+ document.getElementById("status").textContent=paused?"⏸ GAME PAUSED":"🏁 RACE STARTED!";
+ if(!paused)requestAnimationFrame(loop);
+}
+
+function soundToggle(){
+ sound=!sound;
+ document.getElementById("status").textContent=sound?"🔊 SOUND ON":"🔇 SOUND OFF";
+}
+
+function loop(){
+ if(!running||paused)return;
+ roadDraw();
+ car(player,455,"#ed2525");
+
+ if(frame++%55===0){
+ let lanes=[55,115,205,265];
+ enemies.push({
+ x:lanes[Math.floor(Math.random()*lanes.length)],
+ y:-80,
+ color:["blue","yellow","white","orange"][Math.floor(Math.random()*4)]
+ });
+ }
+
+ for(let i=enemies.length-1;i>=0;i--){
+ let e=enemies[i];
+ e.y+=speed;
+ car(e.x,e.y,e.color);
+
+ if(e.y+70>455&&e.y<525&&player<e.x+40&&player+40>e.x){
+ running=false;
+ beep(70);
+ document.getElementById("status").textContent="💥 GAME OVER! Score: "+score;
+ return;
+ }
+
+ if(e.y>550){
+ enemies.splice(i,1);
+ score+=10;
+ if(score > bestScore){
+ bestScore = score;
+ localStorage.setItem("vivekBest",bestScore);
+ document.getElementById("best").textContent = bestScore;
+}
+ document.getElementById("score").textContent=score;
+ if(score%50===0)speed+=.5;
+ }
+ }
+ requestAnimationFrame(loop);
+}
+
+roadDraw();
+car(player,455,"#ed2525");
+</script>
+</body>
+</html>
